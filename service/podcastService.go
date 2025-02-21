@@ -19,8 +19,8 @@ import (
 	"github.com/akhilrex/podgrab/model"
 	"github.com/antchfx/xmlquery"
 	"github.com/bogem/id3v2"
-	"github.com/dhowden/tag"
 	strip "github.com/grokify/html-strip-tags-go"
+	id3 "github.com/mikkyang/id3-go"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -116,7 +116,7 @@ func AddOpml(content string) error {
 	model, err := ParseOpml(content)
 	if err != nil {
 		fmt.Println(err.Error())
-		return errors.New("Invalid file format")
+		return errors.New("invalid file format")
 	}
 	var wg sync.WaitGroup
 	for _, outline := range model.Body.Outline {
@@ -364,19 +364,6 @@ func AddPodcastItems(podcast *db.Podcast, newPodcast bool) error {
 	}
 	//go updateSizeFromUrl(itemsAdded)
 	return err
-}
-
-func updateSizeFromUrl(itemUrlMap map[string]string) {
-
-	for id, url := range itemUrlMap {
-		size, err := GetFileSizeFromUrl(url)
-		if err != nil {
-			size = 1
-		}
-
-		db.UpdatePodcastItemFileSize(id, size)
-	}
-
 }
 
 func UpdateAllFileSizes() {
@@ -833,16 +820,31 @@ func UpdateAudioTags(filePath string, title string, pubDate time.Time) error {
 	switch ext {
 	case ".mp3":
 		return updateID3Tags(filePath, title, pubDate)
-	case ".m4a":
-		return updateM4ATags(filePath, title, pubDate)
-	case ".ogg":
-		return updateOGGTags(filePath, title, pubDate)
+	case ".m4a", ".ogg":
+		return updateID3v2Tags(filePath, title, pubDate)
 	default:
 		return fmt.Errorf("unsupported file format: %s", ext)
 	}
 }
 
 func updateID3Tags(filePath string, title string, pubDate time.Time) error {
+	tag, err := id3.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("error opening file: %v", err)
+	}
+	defer tag.Close()
+
+	tag.SetTitle(title)
+	tag.SetYear(fmt.Sprintf("%d", pubDate.Year()))
+
+	if err = tag.Close(); err != nil {
+		return fmt.Errorf("error closing ID3 tags: %v", err)
+	}
+
+	return nil
+}
+
+func updateID3v2Tags(filePath string, title string, pubDate time.Time) error {
 	tag, err := id3v2.Open(filePath, id3v2.Options{Parse: true})
 	if err != nil {
 		return fmt.Errorf("error opening file: %v", err)
@@ -850,55 +852,11 @@ func updateID3Tags(filePath string, title string, pubDate time.Time) error {
 	defer tag.Close()
 
 	tag.SetTitle(title)
-	tag.SetYear(pubDate.Year())
+	tag.SetYear(fmt.Sprintf("%d", pubDate.Year()))
 	tag.AddFrame(tag.CommonID("TDRC"), id3v2.TextFrame{Encoding: id3v2.EncodingUTF8, Text: pubDate.Format("2006-01-02")})
 
 	if err = tag.Save(); err != nil {
 		return fmt.Errorf("error saving ID3 tags: %v", err)
-	}
-
-	return nil
-}
-
-func updateM4ATags(filePath string, title string, pubDate time.Time) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
-
-	meta, err := tag.ReadFrom(file)
-	if err != nil {
-		return fmt.Errorf("error reading tags: %v", err)
-	}
-
-	meta.SetTitle(title)
-	meta.SetDate(pubDate)
-
-	if err = tag.WriteTo(file, meta); err != nil {
-		return fmt.Errorf("error saving tags: %v", err)
-	}
-
-	return nil
-}
-
-func updateOGGTags(filePath string, title string, pubDate time.Time) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
-
-	meta, err := tag.ReadFrom(file)
-	if err != nil {
-		return fmt.Errorf("error reading tags: %v", err)
-	}
-
-	meta.SetTitle(title)
-	meta.SetDate(pubDate)
-
-	if err = tag.WriteTo(file, meta); err != nil {
-		return fmt.Errorf("error saving tags: %v", err)
 	}
 
 	return nil

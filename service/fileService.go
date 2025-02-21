@@ -261,7 +261,7 @@ func GetFileSizeFromUrl(url string) (int64, error) {
 	// Is our request ok?
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Did not receive 200")
+		return 0, fmt.Errorf("did not receive 200")
 	}
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
@@ -280,14 +280,14 @@ func CreateBackup() (string, error) {
 	tarballFilePath := path.Join(folder, backupFileName)
 	file, err := os.Create(tarballFilePath)
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("Could not create tarball file '%s', got error '%s'", tarballFilePath, err.Error()))
+		return "", fmt.Errorf("could not create tarball file '%s', got error '%s'", tarballFilePath, err.Error())
 	}
 	defer file.Close()
 
 	dbPath := path.Join(configPath, "podgrab.db")
 	_, err = os.Stat(dbPath)
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("Could not find db file '%s', got error '%s'", dbPath, err.Error()))
+		return "", fmt.Errorf("could not find db file '%s', got error '%s'", dbPath, err.Error())
 	}
 	gzipWriter := gzip.NewWriter(file)
 	defer gzipWriter.Close()
@@ -305,13 +305,13 @@ func CreateBackup() (string, error) {
 func addFileToTarWriter(filePath string, tarWriter *tar.Writer) error {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Could not open file '%s', got error '%s'", filePath, err.Error()))
+		return fmt.Errorf("could not open file '%s', got error '%s'", filePath, err.Error())
 	}
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return errors.New(fmt.Sprintf("Could not get stat for file '%s', got error '%s'", filePath, err.Error()))
+		return fmt.Errorf("could not get stat for file '%s', got error '%s'", filePath, err.Error())
 	}
 
 	header := &tar.Header{
@@ -323,12 +323,12 @@ func addFileToTarWriter(filePath string, tarWriter *tar.Writer) error {
 
 	err = tarWriter.WriteHeader(header)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Could not write header for file '%s', got error '%s'", filePath, err.Error()))
+		return fmt.Errorf("could not write header for file '%s', got error '%s'", filePath, err.Error())
 	}
 
 	_, err = io.Copy(tarWriter, file)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Could not copy the file '%s' data to the tarball, got error '%s'", filePath, err.Error()))
+		return fmt.Errorf("could not copy the file '%s' data to the tarball, got error '%s'", filePath, err.Error())
 	}
 
 	return nil
