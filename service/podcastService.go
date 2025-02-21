@@ -16,6 +16,7 @@ import (
 	"github.com/akhilrex/podgrab/db"
 	"github.com/akhilrex/podgrab/model"
 	"github.com/antchfx/xmlquery"
+	"github.com/bogem/id3v2"
 	strip "github.com/grokify/html-strip-tags-go"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -35,7 +36,7 @@ func ParseOpml(content string) (model.OpmlModel, error) {
 	return response, err
 }
 
-//FetchURL is
+// FetchURL is
 func FetchURL(url string) (model.PodcastData, []byte, error) {
 	body, err := makeQuery(url)
 	if err != nil {
@@ -346,6 +347,13 @@ func AddPodcastItems(podcast *db.Podcast, newPodcast bool) error {
 			}
 			db.CreatePodcastItem(&podcastItem)
 			itemsAdded[podcastItem.ID] = podcastItem.FileURL
+
+			// Update ID3 tags after downloading the episode
+			go func(filePath, title string, pubDate time.Time) {
+				if err := UpdateID3Tags(filePath, title, pubDate); err != nil {
+					Logger.Errorw("Error updating ID3 tags", err)
+				}
+			}(podcastItem.DownloadPath, podcastItem.Title, podcastItem.PubDate)
 		}
 	}
 	if (latestDate != time.Time{}) {
@@ -814,4 +822,22 @@ func TogglePodcastPause(id string, isPaused bool) error {
 	}
 
 	return db.TogglePodcastPauseStatus(id, isPaused)
+}
+
+// UpdateID3Tags updates the ID3 tags of the given file with the provided title and date.
+func UpdateID3Tags(filePath string, title string, pubDate time.Time) error {
+	tag, err := id3v2.Open(filePath, id3v2.Options{Parse: true})
+	if err != nil {
+		return fmt.Errorf("error opening file: %v", err)
+	}
+	defer tag.Close()
+
+	tag.SetTitle(title)
+	tag.SetYear(pubDate.Year())
+
+	if err = tag.Save(); err != nil {
+		return fmt.Errorf("error saving ID3 tags: %v", err)
+	}
+
+	return nil
 }
